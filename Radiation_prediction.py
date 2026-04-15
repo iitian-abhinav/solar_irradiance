@@ -62,7 +62,7 @@ col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
     st.subheader("🌡️ Weather Conditions")
 
-    temperature = st.slider("Temperature (°F)", 20.0, 120.0, 60.0)
+    temperature = st.slider("Temperature (°F)", 20.0, 80.0, 50.0)
     pressure = st.slider("Barometric Pressure (Hg)", 25.0, 32.0, 30.0)
     humidity = st.slider("Humidity (%)", 0.0, 100.0, 50.0)
 
