@@ -5,6 +5,7 @@ import pickle
 import warnings
 import os
 import datetime
+import gdown
 
 warnings.filterwarnings('ignore')
 
@@ -21,16 +22,28 @@ st.title("☀️ Solar Radiation Predictor")
 st.divider()
 
 # ─────────────────────────────────────────────────────────────
+# Google Drive Links (FINAL)
+# ─────────────────────────────────────────────────────────────
+MODEL_URL = "https://drive.google.com/uc?id=1mm3VptDC7eFaDikOHaQV6iR7mHzzubj9"
+SCALER_URL = "https://drive.google.com/uc?id=1KS9M8uF_FE7V5yI6Fzz7MiaR2606UwWD"
+
+# ─────────────────────────────────────────────────────────────
 # Load model + scaler
 # ─────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_artifacts():
-    base_path = "/Users/abhinavkumar/Desktop/sem 8/UGRP/Predicting Solar Irradiance/"
+    if not os.path.exists("model.pkl"):
+        with st.spinner("Downloading model..."):
+            gdown.download(MODEL_URL, "model.pkl", quiet=False)
 
-    with open(os.path.join(base_path, "model.pkl"), "rb") as f:
+    if not os.path.exists("scaler.pkl"):
+        with st.spinner("Downloading scaler..."):
+            gdown.download(SCALER_URL, "scaler.pkl", quiet=False)
+
+    with open("model.pkl", "rb") as f:
         model = pickle.load(f)
 
-    with open(os.path.join(base_path, "scaler.pkl"), "rb") as f:
+    with open("scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
 
     return model, scaler
@@ -84,7 +97,7 @@ with col2:
     sethour = st.slider("Sunset Hour", 0, 23, 18)
 
 # ─────────────────────────────────────────────────────────────
-# Feature Engineering (11 features)
+# Feature Engineering (MUST MATCH TRAINING)
 # ─────────────────────────────────────────────────────────────
 def make_model_features():
     temp = np.sqrt(temperature + 1)
@@ -121,7 +134,7 @@ prediction = float(model.predict(X_scaled)[0])
 prediction = max(0.0, prediction)
 
 # ─────────────────────────────────────────────────────────────
-# COLUMN 3 — OUTPUT
+# OUTPUT
 # ─────────────────────────────────────────────────────────────
 with col3:
     st.subheader("🔮 Live Prediction")
