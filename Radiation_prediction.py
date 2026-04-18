@@ -69,7 +69,23 @@ with col1:
     st.subheader("💨 Wind Conditions")
 
     wind_speed = st.slider("Wind Speed (mph)", 0.0, 100.0, 10.0)
-    wind_direction = st.slider("Wind Direction (°)", 0.0, 360.0, 180.0)
+
+    compass_options = {
+        "N  (0°)":    0.0,
+        "NE (45°)":  45.0,
+        "E  (90°)":  90.0,
+        "SE (135°)": 135.0,
+        "S  (180°)": 180.0,
+        "SW (225°)": 225.0,
+        "W  (270°)": 270.0,
+        "NW (315°)": 315.0,
+    }
+    compass_label = st.select_slider(
+        "Wind Direction",
+        options=list(compass_options.keys()),
+        value="S  (180°)",
+    )
+    wind_direction = compass_options[compass_label]
 
 # ─────────────────────────────────────────────────────────────
 # COLUMN 2 — DATE & TIME
