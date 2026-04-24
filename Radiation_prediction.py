@@ -6,6 +6,7 @@ import warnings
 import os
 import datetime
 import gdown
+import plotly.graph_objects as go
 
 warnings.filterwarnings('ignore')
 
@@ -52,7 +53,13 @@ def load_artifacts():
 model, scaler = load_artifacts()
 
 # ─────────────────────────────────────────────────────────────
-# Layout
+# Session state — history log
+# ─────────────────────────────────────────────────────────────
+if "history" not in st.session_state:
+    st.session_state.history = []   # list of dicts
+
+# ─────────────────────────────────────────────────────────────
+# Layout — inputs
 # ─────────────────────────────────────────────────────────────
 col1, col2, col3 = st.columns([1, 1, 1])
 
@@ -150,7 +157,37 @@ prediction = float(model.predict(X_scaled)[0])
 prediction = max(0.0, prediction)
 
 # ─────────────────────────────────────────────────────────────
-# OUTPUT
+# Auto-log every unique prediction to history
+# ─────────────────────────────────────────────────────────────
+current_record = {
+    "point": len(st.session_state.history) + 1,
+    "prediction_wm2": round(prediction, 2),
+    "temperature_F": temperature,
+    "pressure_Hg": pressure,
+    "humidity_pct": humidity,
+    "wind_speed_mph": wind_speed,
+    "wind_direction_deg": wind_direction,
+    "month": month,
+    "day": day,
+    "hour": hour,
+    "minute": minute,
+    "sunrise_hour": risehour,
+    "sunset_hour": sethour,
+    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+}
+
+# Append only when the prediction differs from the last logged value
+if (
+    not st.session_state.history
+    or st.session_state.history[-1]["prediction_wm2"] != current_record["prediction_wm2"]
+    or st.session_state.history[-1]["temperature_F"] != temperature
+    or st.session_state.history[-1]["humidity_pct"] != humidity
+):
+    current_record["point"] = len(st.session_state.history) + 1
+    st.session_state.history.append(current_record)
+
+# ─────────────────────────────────────────────────────────────
+# OUTPUT — col3
 # ─────────────────────────────────────────────────────────────
 with col3:
     st.subheader("🔮 Live Prediction")
@@ -178,14 +215,152 @@ with col3:
     st.divider()
 
     with st.expander("🔍 See transformed values sent to the model"):
-        df = pd.DataFrame({
+        df_debug = pd.DataFrame({
             "Raw Features": X_input.flatten().round(4),
             "Scaled Features": X_scaled.flatten().round(4),
         })
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df_debug, use_container_width=True)
+
+# ─────────────────────────────────────────────────────────────
+# SCATTER PLOT SECTION
+# ─────────────────────────────────────────────────────────────
+st.divider()
+st.subheader("📈 Prediction History — Scatter Plot")
+
+history_df = pd.DataFrame(st.session_state.history)
+
+plot_col, ctrl_col = st.columns([3, 1])
+
+with ctrl_col:
+    st.markdown("**Plot X-axis**")
+    x_axis_options = [
+        "point", "temperature_F", "pressure_Hg", "humidity_pct",
+        "wind_speed_mph", "wind_direction_deg", "month", "day",
+        "hour", "sunrise_hour", "sunset_hour",
+    ]
+    x_axis = st.selectbox("X-axis variable", x_axis_options, index=0)
+
+    color_by_options = ["None"] + [
+        "temperature_F", "humidity_pct", "wind_speed_mph",
+        "month", "hour", "pressure_Hg",
+    ]
+    color_by = st.selectbox("Color points by", color_by_options, index=1)
+
+    if st.button("🗑️ Clear history"):
+        st.session_state.history = []
+        st.rerun()
+
+    # ── CSV download ──────────────────────────────────────────
+    if not history_df.empty:
+        csv_bytes = history_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="⬇️ Download CSV",
+            data=csv_bytes,
+            file_name="solar_radiation_predictions.csv",
+            mime="text/csv",
+        )
+
+with plot_col:
+    if history_df.empty:
+        st.info("Adjust any slider to start logging predictions here.")
+    else:
+        if color_by != "None":
+            color_vals = history_df[color_by]
+            color_kwargs = dict(
+                color=color_vals,
+                colorscale="Plasma",
+                showscale=True,
+                colorbar=dict(title=color_by),
+                size=10,
+                line=dict(width=0.5, color="white"),
+            )
+        else:
+            color_kwargs = dict(
+                color="#f07800",
+                size=10,
+                line=dict(width=0.5, color="white"),
+            )
+
+        fig = go.Figure()
+
+        # connecting line
+        fig.add_trace(go.Scatter(
+            x=history_df[x_axis],
+            y=history_df["prediction_wm2"],
+            mode="lines",
+            line=dict(color="rgba(255,255,255,0.15)", width=1),
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+
+        # scatter points
+        fig.add_trace(go.Scatter(
+            x=history_df[x_axis],
+            y=history_df["prediction_wm2"],
+            mode="markers",
+            marker=color_kwargs,
+            text=history_df.apply(
+                lambda r: (
+                    f"Point #{int(r['point'])}<br>"
+                    f"Prediction: {r['prediction_wm2']:.1f} W/m²<br>"
+                    f"Temp: {r['temperature_F']}°F  Humidity: {r['humidity_pct']}%<br>"
+                    f"Wind: {r['wind_speed_mph']} mph @ {r['wind_direction_deg']}°<br>"
+                    f"Time: {int(r['hour']):02d}:{int(r['minute']):02d}  Month/Day: {int(r['month'])}/{int(r['day'])}"
+                ),
+                axis=1,
+            ),
+            hovertemplate="%{text}<extra></extra>",
+            showlegend=False,
+        ))
+
+        # highlight current point
+        last = history_df.iloc[-1]
+        fig.add_trace(go.Scatter(
+            x=[last[x_axis]],
+            y=[last["prediction_wm2"]],
+            mode="markers",
+            marker=dict(color="#00ffcc", size=14, symbol="star",
+                        line=dict(color="white", width=1)),
+            name="Current",
+            hovertemplate=f"Current: {last['prediction_wm2']:.1f} W/m²<extra></extra>",
+        ))
+
+        fig.update_layout(
+            paper_bgcolor="#0e1117",
+            plot_bgcolor="#0e1117",
+            font=dict(color="#fafafa"),
+            xaxis=dict(
+                title=x_axis.replace("_", " ").title(),
+                gridcolor="#2a2a3a",
+                zeroline=False,
+            ),
+            yaxis=dict(
+                title="Predicted Solar Radiation (W/m²)",
+                gridcolor="#2a2a3a",
+                zeroline=False,
+            ),
+            legend=dict(
+                bgcolor="rgba(0,0,0,0.4)",
+                bordercolor="#444",
+                borderwidth=1,
+            ),
+            margin=dict(l=60, r=20, t=20, b=50),
+            height=420,
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+# ─────────────────────────────────────────────────────────────
+# Data table (collapsible)
+# ─────────────────────────────────────────────────────────────
+if not history_df.empty:
+    with st.expander("📋 View full history table"):
+        st.dataframe(
+            history_df.sort_values("point", ascending=False),
+            use_container_width=True,
+        )
 
 # ─────────────────────────────────────────────────────────────
 # Footer
 # ─────────────────────────────────────────────────────────────
 st.divider()
-st.caption("Solar Radiation Prediction · LightGBM / Stacking Model")
