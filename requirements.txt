@@ -6,3 +6,4 @@ requests
 gdown
 scikit-learn
 xgboost
+plotly
